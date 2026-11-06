@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="si">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Media Unit QR System</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 min-h-screen p-4 flex flex-col items-center">
+    <div class="w-full max-w-md bg-white rounded-2xl shadow-lg p-6 space-y-6">
+        
+        <!-- Header -->
+        <div class="text-center">
+            <h1 class="text-2xl font-bold text-indigo-600">Media Unit Portal</h1>
+            <p class="text-sm text-gray-500">QR Scan Profile & Points System</p>
+        </div>
+
+        <!-- 1. Student Profile View (QR එක scan කළාම හෝ ලින්ක් එකෙන් එන විට පෙනෙන කොටස) -->
+        <div id="profileView" class="hidden space-y-4 bg-indigo-50 p-5 rounded-xl border border-indigo-100">
+            <div class="text-center pb-2 border-b border-indigo-200">
+                <h2 class="text-xs font-semibold uppercase tracking-wider text-indigo-500">Student Profile</h2>
+                <h3 id="viewName" class="text-2xl font-bold text-indigo-900 mt-1"></h3>
+            </div>
+            <div class="space-y-2 text-gray-700 text-sm">
+                <p><strong>Grade / Class:</strong> <span id="viewGrade" class="font-medium text-gray-900"></span></p>
+                <p><strong>WhatsApp:</strong> <span id="viewWhatsapp" class="font-medium text-gray-900"></span></p>
+                <div class="bg-white p-3 rounded-lg shadow-inner flex justify-between items-center mt-3">
+                    <span class="font-bold text-gray-600">Total Points:</span>
+                    <span id="viewPoints" class="text-2xl font-extrabold text-green-600">0</span>
+                </div>
+            </div>
+            <button onclick="goHome()" class="w-full bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700 transition">Admin Panel වෙත යන්න</button>
+        </div>
+
+        <!-- 2. Admin / Main Dashboard (ළමයින් රෙජිස්ටර් කරන්න සහ QR ගන්න තැන) -->
+        <div id="adminView" class="space-y-6">
+            
+            <!-- Tabs -->
+            <div class="flex border-b">
+                <button onclick="switchTab('register')" id="tabReg" class="flex-1 pb-2 font-bold text-indigo-600 border-b-2 border-indigo-600">Register & QR</button>
+                <button onclick="switchTab('points')" id="tabPts" class="flex-1 pb-2 font-bold text-gray-400">Award Points</button>
+            </div>
+
+            <!-- Tab 1: Register Student & Get QR -->
+            <div id="sectionRegister" class="space-y-4">
+                <div class="space-y-3">
+                    <h3 class="font-bold text-gray-800">අලුත් ළමයෙක් ඇතුළත් කරන්න</h3>
+                    <input type="text" id="regName" placeholder="ළමයාගේ නම" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <input type="text" id="regGrade" placeholder="පන්තිය (උදා: 12-A)" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <input type="text" id="regWhatsapp" placeholder="WhatsApp අංකය" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <button onclick="registerStudent()" class="w-full bg-indigo-600 text-white p-3 rounded-lg font-bold hover:bg-indigo-700 shadow-md">ළමයා Register කර QR එක ගන්න</button>
+                </div>
+
+                <!-- Generated QR Display Box -->
+                <div id="qrCard" class="hidden border border-dashed border-indigo-300 p-4 rounded-xl text-center space-y-3 bg-indigo-50/50">
+                    <p class="text-sm font-semibold text-indigo-800">මෙන්න ළමයාගේ ID QR එක:</p>
+                    <div id="qrcode" class="flex justify-center bg-white p-3 rounded-lg shadow inline-block"></div>
+                    <p id="qrStudentName" class="font-bold text-gray-800 text-sm"></p>
+                    <p class="text-xs text-gray-500">මෙම QR එක Print කර ළමයාගේ ID එකට දමන්න.</p>
+                </div>
+
+                <!-- Registered Students List -->
+                <div class="pt-4 border-t">
+                    <h3 class="font-bold text-gray-800 mb-2 text-sm">ලියාපදිංචි කළ සිසුන්:</h3>
+                    <div id="studentList" class="space-y-2 max-h-40 overflow-y-auto"></div>
+                </div>
+            </div>
+
+            <!-- Tab 2: Award Points -->
+            <div id="sectionPoints" class="hidden space-y-4">
+                <h3 class="font-bold text-gray-800">වැඩවලට ලකුණු ලබා දෙන්න</h3>
+                <select id="pointStudentSelect" class="w-full p-3 border rounded-lg bg-white"></select>
+                <input type="number" id="pointValue" placeholder="ලකුණු ප්‍රමාණය (උදා: 10)" class="w-full p-3 border rounded-lg outline-none">
+                <button onclick="addPoints()" class="w-full bg-green-600 text-white p-3 rounded-lg font-bold hover:bg-green-700 shadow-md">ලකුණු එකතු කරන්න</button>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // LocalStorage මඟින් දත්ත සුරැකීම
+        let students = JSON.parse(localStorage.getItem('media_system_students')) || [];
+
+        function saveToStorage() {
+            localStorage.setItem('media_system_students', JSON.stringify(students));
+            updateUI();
+        }
+
+        // URL එකේ ?id=... තියෙනවද බලලා ළමයාගේ Profile එක පෙන්වීම
+        window.onload = function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const studentId = urlParams.get('id');
+
+            if (studentId) {
+                let student = students.find(s => s.id === studentId);
+                if (student) {
+                    document.getElementById('profileView').classList.remove('hidden');
+                    document.getElementById('adminView').classList.add('hidden');
+                    
+                    document.getElementById('viewName').innerText = student.name;
+                    document.getElementById('viewGrade').innerText = student.grade;
+                    document.getElementById('viewWhatsapp').innerText = student.whatsapp;
+                    document.getElementById('viewPoints').innerText = student.points;
+                    return;
+                }
+            }
+            updateUI();
+        }
+
+        function registerStudent() {
+            let name = document.getElementById('regName').value.trim();
+            let grade = document.getElementById('regGrade').value.trim();
+            let whatsapp = document.getElementById('regWhatsapp').value.trim();
+
+            if (!name || !grade) {
+                alert('කරුණාකර නම සහ පන්තිය ඇතුළත් කරන්න!');
+                return;
+            }
+
+            let newId = 'STU_' + Date.now();
+            let newStudent = { id: newId, name, grade, whatsapp, points: 0 };
+            
+            students.push(newStudent);
+            saveToStorage();
+
+            // QR එක සෑදීම
+            document.getElementById('qrcode').innerHTML = "";
+            let currentUrl = window.location.href.split('?')[0];
+            let profileLink = currentUrl + "?id=" + newId;
+
+            new QRCode(document.getElementById("qrcode"), {
+                text: profileLink,
+                width: 140,
+                height: 140
+            });
+
+            document.getElementById('qrStudentName').innerText = name + " (" + grade + ")";
+            document.getElementById('qrCard').classList.remove('hidden');
+
+            // Input Fields Clear කිරීම
+            document.getElementById('regName').value = '';
+            document.getElementById('regGrade').value = '';
+            document.getElementById('regWhatsapp').value = '';
+            alert('ළමයා සාර්ථකව ලියාපදිංචි කළා! QR එක පහතින් පෙනේ.');
+        }
+
+        function updateUI() {
+            let select = document.getElementById('pointStudentSelect');
+            let list = document.getElementById('studentList');
+            select.innerHTML = '<option value="">-- ළමයෙක් තෝරන්න --</option>';
+            list.innerHTML = '';
+
+            if (students.length === 0) {
+                list.innerHTML = '<p class="text-xs text-gray-400">තවම ළමයන් එකතු කර නැත.</p>';
+                return;
+            }
+
+            students.forEach(s => {
+                select.innerHTML += `<option value="${s.id}">${s.name} (${s.grade}) - ලකුණු: ${s.points}</option>`;
+                list.innerHTML += `
+                    <div class="flex justify-between items-center bg-gray-50 p-2 rounded border text-sm">
+                        <span><b>${s.name}</b> (${s.grade})</span>
+                        <span class="text-indigo-600 font-bold">${s.points} pts</span>
+                    </div>
+                `;
+            });
+        }
+
+        function addPoints() {
+            let id = document.getElementById('pointStudentSelect').value;
+            let pts = parseInt(document.getElementById('pointValue').value);
+
+            if (!id || isNaN(pts)) {
+                alert('කරුණාකර ළමයෙක් සහ ලකුණු ප්‍රමාණයක් ඇතුළත් කරන්න!');
+                return;
+            }
+
+            let student = students.find(s => s.id === id);
+            if (student) {
+                student.points += pts;
+                saveToStorage();
+                alert(student.name + " ට ලකුණු " + pts + " ක් එකතු කළා!");
+                document.getElementById('pointValue').value = '';
+            }
+        }
+
+        function switchTab(tab) {
+            if (tab === 'register') {
+                document.getElementById('sectionRegister').classList.remove('hidden');
+                document.getElementById('sectionPoints').classList.add('hidden');
+                document.getElementById('tabReg').className = "flex-1 pb-2 font-bold text-indigo-600 border-b-2 border-indigo-600";
+                document.getElementById('tabPts').className = "flex-1 pb-2 font-bold text-gray-400";
+            } else {
+                document.getElementById('sectionRegister').classList.add('hidden');
+                document.getElementById('sectionPoints').classList.remove('hidden');
+                document.getElementById('tabPts').className = "flex-1 pb-2 font-bold text-indigo-600 border-b-2 border-indigo-600";
+                document.getElementById('tabReg').className = "flex-1 pb-2 font-bold text-gray-400";
+            }
+        }
+
+        function goHome() {
+            window.location.href = window.location.href.split('?')[0];
+        }
+    </script>
+</body>
+</html>
